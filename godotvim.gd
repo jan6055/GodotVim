@@ -21,9 +21,10 @@ var insert_keycode_actions: Dictionary = {
 var input_buffuer: String = ""
 
 
+
 var normal_keycode_actions: Dictionary = {
 	"I": set_insert_mode,
-	"Shift+I": set_insert_mode_adjoint.bind(move_caret_line_start),
+	"Shift+I": set_insert_mode_adjoint.bind(move_caret_soft_line_start),
 	"O": set_insert_mode_adjoint.bind(new_line_down),
 	"Shift+O": set_insert_mode_adjoint.bind(new_line_up),
 	"A": a_action,
@@ -33,6 +34,7 @@ var normal_keycode_actions: Dictionary = {
 	"L": move_caret_right,
 	"Right": move_caret_right,
 	"J": move_caret_down,
+	"Shift+J": merge_two_lines,
 	"Down": move_caret_down,
 	"K": move_caret_up,
 	"Up": move_caret_up,
@@ -48,9 +50,13 @@ var normal_keycode_actions: Dictionary = {
 	"Minus": move_caret_soft_line_up_start,
 	"X": delete_caret_char,
 	"Ctrl+R": redo,
+	"Escape": normal_escape,
+	"Shift+D": delete_to_line_end,
 }
 
 
+func normal_escape():
+	code_editor.deselect()
 
 func a_action():
 	code_editor.set_caret_column(current_column() + 1)
@@ -58,13 +64,14 @@ func a_action():
 
 func undo():
 	code_editor.undo()
+	code_editor.deselect()
 func redo():
 	code_editor.redo()
-
+##t
 #当前光标所在的列，从0开始
 func current_column() -> int:
 	return code_editor.get_caret_column()
-
+	
 var unhandle_keycode = [
 	KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5,
 	KEY_F6,KEY_F7,KEY_F8,KEY_F9,KEY_F10
@@ -117,7 +124,6 @@ func set_visial_mode() -> void:
 	code_editor.caret_type = TextEdit.CARET_TYPE_BLOCK
 	current_mode = VimMode.Visial
 
-
 func set_insert_mode_adjoint(adjoint_func: Callable) -> void:
 	adjoint_func.call()
 	set_insert_mode()
@@ -129,10 +135,13 @@ func set_insert_mode() -> void:
 func set_normal_mode() -> void:
 	code_editor.caret_type = TextEdit.CARET_TYPE_BLOCK
 	current_mode = VimMode.Normal
-	print("%d -- %d" % [current_column(),current_line_text().length()])
 	if current_column() == current_line_text().length() and current_column() != 0:
 		move_caret_left()
+	# 取消当前编辑器选择的文本
 	code_editor.deselect()
+	#取消自动补全的菜单
+	code_editor.cancel_code_completion()
+	
 #line：移动到的行数，如果是-1,则不动
 #column：移动到的列数, 如果是-1,则不动
 #note: 如果不传递任何参数，什么效果也不会发生
@@ -186,11 +195,20 @@ func move_caret_up() -> void:
 	var line = code_editor.get_caret_line()
 	code_editor.set_caret_line(line - 1)
 
+
+func move_caret_screen_top() -> void:
+	
+	pass
+func move_caret_screen_bottom() -> void:
+	pass
+
+#TODO
 func move_next_word():
 	pass
 
 func new_line_up() -> void:
-	var text = current_line_text()
+	
+	move_caret_line_start()
 	code_editor.insert_text_at_caret("\n")
 	move_caret_up()
 	
@@ -348,7 +366,15 @@ func current_line_text() -> String:
 
 
 #############################ACTION########################
-
+#调用这个函数，就像按下了keycode对应的按键一样
+func press_key(keycode: int, ctrl: bool = false, shift: bool = false):
+	var event: InputEventKey = InputEventKey.new()
+	event.keycode = keycode
+	event.pressed = true
+	event.shift_pressed = shift
+	event.ctrl_pressed = ctrl
+	Input.parse_input_event(event)
+	
 func delete_caret_char():
 	code_editor.select(current_line(),current_column(),current_line(),current_column() + 1)
 	code_editor.delete_selection()
@@ -389,8 +415,10 @@ func _enable_plugin() -> void:
 	editor_interface = get_editor_interface()
 	script_editor = editor_interface.get_script_editor()
 	#当编辑的脚本做出改变的时候，更改相应的CodeEdit的实例
-	script_editor.editor_script_changed.connect(set_code_editor_by_script)
-	script_editor.script_close.connect(reset_code_editor)
+	if not script_editor.editor_script_changed.is_connected(set_code_editor_by_script):
+		script_editor.editor_script_changed.connect(set_code_editor_by_script)
+	if not script_editor.script_close.is_connected(reset_code_editor):
+		script_editor.script_close.connect(reset_code_editor)
 	code_editor = script_editor.get_current_editor().get_base_editor() as CodeEdit
 	print("Enable VimMode")
 	
@@ -399,7 +427,45 @@ func _disable_plugin() -> void:
 	script_editor.editor_script_changed.disconnect(set_code_editor_by_script)
 	script_editor.script_close.disconnect(reset_code_editor)
 	print("Disable VimMode")
+
+# 合并光标所在的行和光标所在的下一行，并以空格分隔
+# 如果光标在最后一行，则什么也不做
+func merge_two_lines():
+	var line = current_line()
+	var len = current_line_text().length()
+	var next_line_text = code_editor.get_line(line+1)
+	var col = next_line_text.length()
 	
+	if line == code_editor.get_line_count():
+		return
+	code_editor.select(line,len,line+1,col)
+	code_editor.delete_selection()
+	insert_text_at_caret(next_line_text)
+	
+func insert_text_at_caret(text: String) -> void:
+	code_editor.insert_text_at_caret(text)
+
+#选择光标所在的行
+func select_line(): 
+	var line = current_line()
+	code_editor.select(line,0,line,current_line_text().length())
+
+#删除光标所在的行并返回删除的字符串
+func delete_line() -> String:
+	var text: String = current_line_text()
+	select_line()
+	code_editor.delete_selection()
+	return text
+
+#这个函数有一些问题
+#它不会立刻删除到行尾，而是有一个短暂的延迟
+func delete_to_line_end():
+	var line = current_line()
+	var text = current_line_text()
+	var col = current_column()
+	code_editor.set_line(line,text.left(col))
+	return text.right(-col)
+
 func _enter_tree():
 	_enable_plugin()
 		
