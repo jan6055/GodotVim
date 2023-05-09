@@ -7,7 +7,9 @@ enum VimMode {
 	Command = 3,
 	Visial = 4,
 }
-
+enum NormalState {
+	
+}
 const WHITE_SPACE: String = " \n\t"
 const SYMBOL: String = "!@#$%^&*()+~`-=[]{}:;\'\"<>,./?"
 #在当前状态下，按下特定的按键执行的动作
