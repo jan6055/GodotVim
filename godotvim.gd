@@ -206,15 +206,16 @@ func move_caret_screen_bottom() -> void:
 func move_next_word():
 	pass
 
+#在当前行上添加一行，会自动缩进
 func new_line_up() -> void:
-	
-	move_caret_line_start()
-	code_editor.insert_text_at_caret("\n")
 	move_caret_up()
-	
+	move_caret_line_end()
+	press_key(KEY_ENTER)
+
+#在当前行下添加一行，会自动缩进
 func new_line_down() -> void:
 	move_caret_line_end()
-	code_editor.insert_text_at_caret("\n")
+	press_key(KEY_ENTER)
 
 #找到当前光标后的下一个单词的位置
 func move_caret_next_word():
